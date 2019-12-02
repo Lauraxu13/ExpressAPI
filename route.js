@@ -1,84 +1,69 @@
 const express = require("express");
 const labRoute = express.Router();
+const pool = require("./connecting");
 
 //http://localhost:3000/
 labRoute.get("/", (req, res) => {
   res.send("it lives!");
 });
 
-const cartItems= [
-  { id: 1, product: "cookies", price: 2, quanitiy: 10 },
-  { id: 2, product: "candy", price: 1, quanitiy: 2 },
-  { id: 3, product: "soda", price: 1, quanitiy: 10 },
-  { id: 4, product: "ham", price: 6, quanitiy: 11 },
-  { id: 5, product: "bread", price: 2, quanitiy: 6 },
-  { id: 6, product: "water", price: 1, quanitiy: 7 },
-  { id: 7, product: "potato", price: 3, quanitiy: 5 }
-];
-
-let nextId = 8;
-
 //displays cart items with /cartItems
-labRoute.get("/cartItems", (req, res) => {
-  res.json(cartItems);
+labRoute.get("/cart-items", (req, res) => {
+  let sql = "SELECT * FROM shopping_cart";
+  pool.query(sql).then(result => {
+    res.json(result.rows);
+  });
 });
 
 //displays cart item when calling for Id# /cartItems/4
-labRoute.get("/cartItems/:id", (req, res) => {
+labRoute.get("/cart-items/:id", (req, res) => {
   const id = parseInt(req.params.id);
-  console.log(id);
-  let founditem = cartItems.find(aItem => aItem.id === id);
-  if (founditem) {
-    res.json(founditem);
-  } else {
-    res.status(404); // not found
-    res.send(`no item with id ${id}`);
-  }
+  let sql = "SELECT * FROM shopping_cart WHERE id = $1::int";
+  let params = [id];
+  pool.query(sql, params).then(result => {
+    // if the array is not empty...
+    if (result.rows.length !== 0) {
+      // send the first (and only) row
+      res.json(result.rows[0]);
+    } else {
+      // else not found
+      res.status(404);
+      res.send("No such Item.");
+    }
+  });
 });
-
 
 //adds  "post" new items to cartitems with Postman
-labRoute.post("/cartItems", (req, res) => {
+labRoute.post("/cart-items", (req, res) => {
   const item = req.body;
-item.id = nextId;
-  nextId++;
-  cartItems.push(item);
 
-  res.status(201);
-  res.json(item);
+  // added "RETURNING *" in order to get the newly created row
+  let sql = `INSERT INTO shoppping_cart (product, price, quantity)
+  VALUES ($1::TEXT, $2::INT, $3::INT) RETURNING *`;
+  let params = [item.product, item.price, item.quantity];
+  pool.query(sql, params).then(result => {
+    res.status(201);
+    res.json(result.rows[0]);
+  });
 });
 
-
-//edit items with postman "Put"
-labRoute.put("/cartItems/:id", (req, res) => {
-    const id = parseInt(req.params.id);
-    const item = req.body;
-    cartItems.id = id;
-    // Find Index by ID
-    const index = cartItems.findIndex(i => i.id === id);
-    // Replace at index
-    cartItems.splice(index, 1, item);
-    res.json(item);
+cartRoutes.put("/cart-items/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  const item = req.body;
+  let sql =
+    "UPDATE shopping_cart SET product=$1::TEXT, price=$2::INT, quantity=$3::INT WHERE id=$4::INT RETURNING *";
+  let params = [item.product, item.price, item.quantity, id];
+  pool.query(sql, params).then(result => {
+    res.json(result.rows[0]);
   });
-
-
-
-
-//removes items with Postman "delete"
-
-  
-labRoute.delete("/cartItems/:id", (req, res) => {
-    const id = parseInt(req.params.id);
-    const index = cartItems.findIndex(i => i.id === id);
-    // If found...
-    if (index !== -1) {
-        cartItems.splice(index, 1);
-    }
-    // Set response code to 204. Send no content.
+});
+cartRoutes.delete("/cart-items/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  let sql = "DELETE FROM shopping_cart WHERE id=$1::INT";
+  let params = [id];
+  pool.query(sql, params).then(result => {
     res.sendStatus(204);
   });
+});
 
-
-
-//make it possible to access fish route in other places
 module.exports = labRoute;
